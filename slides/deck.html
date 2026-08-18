@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Columnar Logs / Metrics — Elastic</title>
+<style>
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --ink3: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,.10);
+    --blue: #3987e5; --orange: #d95926; --green: #199e70; --gold: #f7c548;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; background: var(--page); color: var(--ink);
+    font: 18px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  .slide {
+    position: absolute; inset: 0; display: none; flex-direction: column; justify-content: center;
+    padding: 7vh 9vw; max-width: 1400px; margin: 0 auto;
+  }
+  .slide.active { display: flex; }
+  .eyebrow { font-size: 14px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--ink3); margin-bottom: 22px; }
+  h1 { font-size: clamp(40px, 5.2vw, 72px); line-height: 1.08; letter-spacing: -1px; font-weight: 700; }
+  h2 { font-size: clamp(30px, 3.6vw, 48px); line-height: 1.12; letter-spacing: -.6px; margin-bottom: 30px; }
+  .sub { font-size: clamp(18px, 1.6vw, 24px); color: var(--ink2); margin-top: 26px; max-width: 860px; }
+  .accent { color: var(--green); }
+  ul.big { list-style: none; margin-top: 8px; }
+  ul.big li { font-size: clamp(17px, 1.5vw, 23px); color: var(--ink2); padding: 13px 0 13px 34px; position: relative; }
+  ul.big li::before { content: ""; position: absolute; left: 0; top: calc(50% - 5px); width: 10px; height: 10px; border-radius: 3px; background: var(--green); }
+  ul.big li b { color: var(--ink); }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px; }
+  .card h3 { font-size: 20px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .card p { font-size: 16px; color: var(--ink2); }
+  .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  code, .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .code-block { background: #111110; border: 1px solid var(--grid); border-radius: 12px; padding: 22px 26px; font-size: clamp(15px, 1.3vw, 20px); line-height: 1.7; color: var(--ink2); }
+  .code-block .k { color: var(--blue); } .code-block .s { color: #7ee0b8; }
+  .badge { display: inline-block; font-size: 14px; font-weight: 600; padding: 5px 14px; border-radius: 999px; border: 1px solid var(--border); color: var(--ink2); margin-right: 10px; }
+  .badge.tp { color: var(--gold); border-color: rgba(247,197,72,.4); }
+  .badge.ga { color: var(--green); border-color: rgba(25,158,112,.4); }
+  .foot { position: absolute; bottom: 28px; left: 9vw; right: 9vw; display: flex; justify-content: space-between; font-size: 13px; color: var(--ink3); }
+  .barrow { display: grid; grid-template-columns: 220px 1fr 130px; gap: 0 18px; align-items: center; margin: 14px 0; }
+  .barrow .n { font-size: 18px; font-weight: 600; } .barrow .n small { display: block; font-weight: 400; font-size: 13px; color: var(--ink3); font-family: ui-monospace, Menlo, monospace; }
+  .barrow .track { height: 26px; position: relative; }
+  .barrow .bar { height: 26px; border-radius: 0 4px 4px 0; }
+  .barrow .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hero-num { font-size: clamp(80px, 12vw, 170px); font-weight: 700; letter-spacing: -3px; line-height: 1; color: var(--green); }
+  .kicker { font-size: 15px; color: var(--ink3); margin-top: 34px; }
+  .flow { display: flex; gap: 14px; align-items: stretch; margin-top: 10px; flex-wrap: wrap; }
+  .flow .step { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; flex: 1; min-width: 200px; }
+  .flow .step .num { font-size: 13px; font-weight: 700; color: var(--green); letter-spacing: 1px; }
+  .flow .step p { font-size: 15px; color: var(--ink2); margin-top: 6px; }
+  .progress { position: fixed; bottom: 0; left: 0; height: 3px; background: var(--green); transition: width .25s; }
+</style>
+</head>
+<body>
+
+<!-- 1 · Title -->
+<section class="slide active">
+  <div class="eyebrow">Elastic · Elasticsearch 9.6</div>
+  <h1>Columnar Logs<br><span class="accent">/</span> Metrics</h1>
+  <p class="sub">Columnar Mode for logs, the fully columnar TSDS engine for metrics — column-store economics and full-text search, <b style="color:var(--ink)">in the same cluster, on the same data.</b></p>
+  <div style="margin-top:36px">
+    <span class="badge tp">Technical Preview · 9.5</span>
+    <span class="badge ga">GA · 9.6</span>
+  </div>
+</section>
+
+<!-- 2 · The problem -->
+<section class="slide">
+  <div class="eyebrow">The problem</div>
+  <h2>Analytics at log scale has meant running a second system</h2>
+  <div class="cols">
+    <ul class="big">
+      <li><b>Columnar warehouses</b> — ClickHouse, BigQuery, Redshift — win on scan-heavy analytics and storage cost…</li>
+      <li>…but they <b>can't do search</b>: no relevance, no full-text, no needle-in-haystack investigation.</li>
+      <li>So teams run <b>both</b>: double infrastructure, ETL pipelines, data drift, two query languages, two bills.</li>
+    </ul>
+    <div class="card">
+      <h3>Why the split existed</h3>
+      <p>Search engines store each field several ways at once — inverted index, doc values, stored fields — to make <i>every</i> query pattern fast. That redundancy is priceless for search and expensive for petabyte-scale telemetry that's mostly filtered, aggregated, and scanned.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · What's new -->
+<section class="slide">
+  <div class="eyebrow">What's new</div>
+  <h2>Columnar Mode: store each field <span class="accent">once</span>, as columns</h2>
+  <ul class="big">
+    <li>Fields are stored a single time as <b>doc values</b> — the column store — with <b>no inverted index by default</b>.</li>
+    <li>Index sorting + columnar layout → highly compressible, scan-friendly segments.</li>
+    <li>Same Elasticsearch APIs: <b>ES|QL, aggregations, Kibana, alerts, integrations</b> all keep working.</li>
+    <li>Opt-in per index or template: <span class="code" style="color:var(--ink)">index.mode: columnar</span> — nothing else changes.</li>
+  </ul>
+  <p class="kicker">General-purpose columnar analytics, without leaving the cluster your data already lives in.</p>
+</section>
+
+<!-- 4 · Columnar Logs -->
+<section class="slide">
+  <div class="eyebrow">Purpose-built profile</div>
+  <h2>Columnar Logs: analytics economics, search where it counts</h2>
+  <div class="cols">
+    <div>
+      <ul class="big">
+        <li>First specialized columnar profile, <b>purpose-built for log data</b>.</li>
+        <li>Keeps a single inverted index — on the <b><span class="code">message</span></b> field — so full-text investigation stays instant.</li>
+        <li>Everything else — hosts, IPs, ports, rules, metrics — stored <b>fully columnar</b>.</li>
+        <li>Logging defaults: automatic <span class="code">@timestamp</span>, sorted by <span class="code">host.name, @timestamp</span>.</li>
+      </ul>
+    </div>
+    <div class="code-block">
+<span class="k">PUT</span> /my-logs<br>
+{<br>
+&nbsp;&nbsp;<span class="s">"settings"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"index"</span>: {<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="s">"mode"</span>: <span class="s">"logsdb_columnar"</span><br>
+&nbsp;&nbsp;&nbsp;&nbsp;}<br>
+&nbsp;&nbsp;}<br>
+}<br>
+<span style="color:#898781">// that's the whole migration</span>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · Storage economics (live numbers filled by demo) -->
+<section class="slide">
+  <div class="eyebrow">Storage economics — measured live on this cluster</div>
+  <h2>Same <span id="h-docs">60,000</span> NetOps logs, three index modes</h2>
+  <div id="live-bars">
+    <div class="barrow"><div class="n">Standard<small>index.mode: standard</small></div><div class="track"><div class="bar" style="background:var(--blue);width:100%"></div></div><div class="v" id="b-std">—</div></div>
+    <div class="barrow"><div class="n">LogsDB<small>index.mode: logsdb</small></div><div class="track"><div class="bar" id="w-log" style="background:var(--orange);width:45%"></div></div><div class="v" id="b-log">—</div></div>
+    <div class="barrow"><div class="n">Columnar Logs<small>index.mode: logsdb_columnar</small></div><div class="track"><div class="bar" id="w-col" style="background:var(--green);width:30%"></div></div><div class="v" id="b-col">—</div></div>
+  </div>
+  <div style="display:flex;align-items:baseline;gap:24px;margin-top:40px">
+    <div class="hero-num" id="hero-saved">—</div>
+    <div style="font-size:22px;color:var(--ink2);max-width:420px">smaller than standard mode — measured on this dataset, not a benchmark slide</div>
+  </div>
+  <p class="kicker" id="live-note">Numbers load live from the demo server when it's running (localhost:8787).</p>
+</section>
+
+<!-- 6 · Metrics engine -->
+<section class="slide">
+  <div class="eyebrow">Same architecture, applied to metrics</div>
+  <h2>The new Metrics engine: TSDS rebuilt <span class="accent">fully columnar</span></h2>
+  <div class="cols">
+    <div>
+      <ul class="big">
+        <li>Time-series queries up to <b>160× faster</b> than earlier TSDS; up to <b>30× faster than Prometheus</b> on gauge/counter benchmarks.</li>
+        <li><b>~3–4 bytes per data point</b> — ~2.5× less storage than Prometheus.</li>
+        <li>Native <b>OTLP</b> ingest (GA 9.3) and <b>Prometheus Remote Write</b> + PromQL (tech preview).</li>
+        <li>New ES|QL <b><span class="code">TS</span></b> command: <span class="code">RATE</span>, <span class="code">AVG_OVER_TIME</span>, <span class="code">TBUCKET</span> — counter resets handled correctly.</li>
+      </ul>
+    </div>
+    <div class="code-block">
+<span class="k">TS</span> netops-cmp-metrics<br>
+| <span class="k">STATS</span> gbps = SUM(<span class="s">RATE</span>(network.in_bytes)) * 8 / 1e9<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="k">BY</span> host.name, t = <span class="s">TBUCKET</span>(30 minutes)<br>
+| <span class="k">SORT</span> t<br>
+<br>
+<span style="color:#898781" id="m-live">// 86,400 samples · runs live in the demo</span>
+    </div>
+  </div>
+  <p class="kicker">Logs get Columnar Logs; metrics get the columnar TSDS engine. Same cluster, same ES|QL, one platform.</p>
+</section>
+
+<!-- 7 · Prometheus native -->
+<section class="slide">
+  <div class="eyebrow">Native Prometheus &amp; PromQL — GA</div>
+  <h2>Keep your Grafana dashboards. <span class="accent">Migrate the backend.</span></h2>
+  <div class="cols">
+    <div>
+      <ul class="big">
+        <li><b>Prometheus remote-write endpoint</b> — point your agents at Elasticsearch; live on this cluster right now.</li>
+        <li><b>Native PromQL</b> — runs inside the ES|QL engine with the same vectorized, parallel execution. No translation layer to babysit.</li>
+        <li><b>Migration tool</b> — moves existing Grafana dashboards, alerts, and queries to Elastic. Years of PromQL workflows carry over, not thrown away.</li>
+        <li><b>AI-ready integrations</b> for Kubernetes and AWS, plus continued storage-efficiency gains.</li>
+      </ul>
+    </div>
+    <div class="code-block">
+<span style="color:#898781"># your agents:</span><br>
+<span class="k">POST</span> /_prometheus/api/v1/write<br>
+<br>
+<span style="color:#898781"># your dashboards:</span><br>
+<span class="k">PROMQL</span> index=netops-cmp-metrics step=1h<br>
+&nbsp;&nbsp;topk(3, sum by (host.name)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="s">rate</span>(network.in_bytes[1h])))<br>
+<br>
+<span style="color:#898781">// runs live in the demo — finds the fw-iad-03 surge</span>
+    </div>
+  </div>
+  <p class="kicker">One platform for metrics — without asking anyone to abandon the query language they already know.</p>
+</section>
+
+<!-- 8 · What stays the same -->
+<section class="slide">
+  <div class="eyebrow">Zero-disruption adoption</div>
+  <h2>Everything on top keeps working</h2>
+  <div class="cols3">
+    <div class="card"><h3><span class="sw" style="background:var(--blue)"></span>Same APIs</h3><p>ES|QL, <span class="code">_search</span>, aggregations. The storage layout changes underneath; queries and answers don't.</p></div>
+    <div class="card"><h3><span class="sw" style="background:var(--orange)"></span>Same tooling</h3><p>Kibana dashboards, Discover, alerting rules, and ingest integrations run unchanged on columnar indices.</p></div>
+    <div class="card"><h3><span class="sw" style="background:var(--green)"></span>Same cluster</h3><p>No ETL, no second system, no data drift. Search and analytics converge on one copy of the data.</p></div>
+  </div>
+  <p class="kicker">One setting at index creation. That is the entire adoption surface.</p>
+</section>
+
+<!-- 7 · Live demo -->
+<section class="slide">
+  <div class="eyebrow">Live demo</div>
+  <h2>What you're about to see</h2>
+  <div class="flow">
+    <div class="step"><div class="num">01 · FOOTPRINT</div><p>Identical wide-schema firewall logs in three modes — live storage comparison from the running serverless cluster.</p></div>
+    <div class="step"><div class="num">02 · ANALYTICS</div><p>Same ES|QL query raced across all three modes — top talkers, deny rates, p95 durations. Same answers, columnar economics.</p></div>
+    <div class="step"><div class="num">03 · METRICS</div><p>345k data points on the new TSDS engine — counter RATE() charted live, surge on fw-iad-03 visible, then the same data queried in native PromQL.</p></div>
+    <div class="step"><div class="num">04 · SEARCH</div><p>Full-text search with highlighting over the <i>columnar</i> index — the part warehouses can't do.</p></div>
+  </div>
+  <p class="kicker">Demo interface → <span class="code" style="color:var(--ink)">http://localhost:8787</span> · cluster: <span class="code" id="cluster-note">Elasticsearch serverless</span></p>
+</section>
+
+<!-- 8 · Takeaways -->
+<section class="slide">
+  <div class="eyebrow">Takeaways</div>
+  <h2>One platform for search <span class="accent">and</span> analytics</h2>
+  <ul class="big">
+    <li><b>Meaningfully smaller footprint</b> for high-volume logs, metrics, and telemetry → longer retention, same budget.</li>
+    <li><b>Column-store analytics without a second system</b> — no ETL, no drift, no ClickHouse/BigQuery sidecar.</li>
+    <li><b>Search stays first-class</b> — Columnar Logs keeps full-text on <span class="code">message</span>.</li>
+    <li><b>Metrics included</b> — the rebuilt columnar TSDS engine: 160× faster queries, ~3 bytes/sample, OTLP native.</li>
+    <li><b>Prometheus-compatible (GA)</b> — remote write, native PromQL, and a migration tool for existing Grafana dashboards and alerts.</li>
+    <li><b>Available now</b>: Technical Preview today, <b>GA in Elasticsearch 9.6</b>. Enable with one index setting.</li>
+  </ul>
+  <p class="kicker">Next step: pilot one high-volume log data stream on <span class="code">logsdb_columnar</span> and measure your own savings.</p>
+</section>
+
+<div class="foot"><span>Elastic — Columnar Logs / Metrics</span><span id="pg"></span></div>
+<div class="progress" id="prog"></div>
+
+<script>
+const slides = [...document.querySelectorAll(".slide")];
+let cur = 0;
+function show(i) {
+  cur = Math.max(0, Math.min(slides.length - 1, i));
+  slides.forEach((s, j) => s.classList.toggle("active", j === cur));
+  document.getElementById("pg").textContent = (cur + 1) + " / " + slides.length;
+  document.getElementById("prog").style.width = (100 * (cur + 1) / slides.length) + "%";
+  history.replaceState(null, "", "#" + (cur + 1));
+}
+addEventListener("keydown", (e) => {
+  if (["ArrowRight", "PageDown", " "].includes(e.key)) show(cur + 1);
+  if (["ArrowLeft", "PageUp"].includes(e.key)) show(cur - 1);
+  if (e.key === "Home") show(0);
+});
+addEventListener("click", (e) => { if (!e.target.closest("a")) show(cur + 1); });
+show(parseInt(location.hash.slice(1), 10) - 1 || 0);
+
+// Pull live storage numbers from the demo server if it's running.
+const fmtB = (b) => b >= 1<<30 ? (b/(1<<30)).toFixed(2)+" GB" : b >= 1<<20 ? (b/(1<<20)).toFixed(1)+" MB" : (b/1024).toFixed(0)+" KB";
+const API = location.protocol === "file:" ? "http://localhost:8787" : "";
+fetch(API + "/api/overview").then((r) => r.json()).then((d) => {
+  const g = (n) => d.rows.find((x) => x.index === "netops-cmp-" + n);
+  const std = g("standard"), log = g("logsdb"), col = g("columnar");
+  if (!std || !col || col.bytes < 10000) return;
+  document.getElementById("h-docs").textContent = std.docs.toLocaleString("en-US");
+  document.getElementById("b-std").textContent = fmtB(std.bytes);
+  document.getElementById("b-log").textContent = fmtB(log.bytes);
+  document.getElementById("b-col").textContent = fmtB(col.bytes);
+  document.getElementById("w-log").style.width = (100 * log.bytes / std.bytes) + "%";
+  document.getElementById("w-col").style.width = (100 * col.bytes / std.bytes) + "%";
+  document.getElementById("hero-saved").textContent = (100 * (1 - col.bytes / std.bytes)).toFixed(0) + "%";
+  document.getElementById("live-note").textContent = "Measured live from " + (d.endpoint || "the cluster") + " (Elasticsearch " + (d.version || "") + " serverless) just now.";
+  const cn = document.getElementById("cluster-note");
+  if (cn && d.endpoint) cn.textContent = d.endpoint.split(".")[0] + " · Elasticsearch " + (d.version || "") + " serverless";
+}).catch(() => {});
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# secrets / local config
+.env
+*.env
+
+# server runtime cache
+server/.metrics-sizes.json
+
+# internal notes (contain environment-specific details)
+README.internal.md
+
+# environment-specific scripts (built for one specific cluster's data;
+# not useful — and not sanitized — for general use)
+data/clone_apm_future.py
+data/clone_apm_topup.py
+data/backfill_o11y.py
+data/backfill_fixup.py
+data/fix_hosts_ui.py
+data/synth_apm_metrics.py
+
+# OS noise
+.DS_Store
+
+# python bytecode
+__pycache__/
+*.pyc

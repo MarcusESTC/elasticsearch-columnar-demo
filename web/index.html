@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elasticsearch Columnar Logs / Metrics — Live Demo</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --good:           #0ca30c;
+    --mode-standard:  #3987e5;   /* categorical slot 1 */
+    --mode-logsdb:    #d95926;   /* categorical slot 2 */
+    --mode-columnar:  #199e70;   /* categorical slot 3 */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 0 0 64px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+  header { padding: 40px 0 8px; }
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .eyebrow .logo { font-weight: 700; font-size: 15px; letter-spacing: .2px; color: var(--text-primary); }
+  .badge {
+    font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .badge.tp { color: #f7c548; border-color: rgba(247,197,72,.35); }
+  h1 { font-size: 34px; line-height: 1.15; letter-spacing: -.3px; max-width: 780px; }
+  .sub { color: var(--text-secondary); margin-top: 12px; max-width: 720px; }
+  .cluster { color: var(--text-muted); font-size: 12.5px; margin-top: 10px; }
+  .cluster code { color: var(--text-secondary); }
+
+  section { margin-top: 40px; }
+  .sec-label { font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 14px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+  }
+
+  /* stat tiles */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .tile .label { font-size: 13px; color: var(--text-secondary); }
+  .tile .value { font-size: 32px; font-weight: 600; margin-top: 6px; }
+  .tile .value.hero { font-size: 46px; color: var(--text-primary); }
+  .tile .delta { font-size: 13px; color: var(--good); margin-top: 4px; font-weight: 600; }
+  .tile .note { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; }
+
+  /* bar chart */
+  .barchart { display: grid; grid-template-columns: 210px 1fr 110px; row-gap: 18px; align-items: center; margin-top: 8px; }
+  .bc-name { font-size: 14px; color: var(--text-primary); font-weight: 600; }
+  .bc-mode { font-size: 12px; color: var(--text-muted); display: block; font-weight: 400; }
+  .bc-track { position: relative; height: 24px; }
+  .bc-bar {
+    height: 24px; border-radius: 0 4px 4px 0; min-width: 3px;
+    transition: width .8s cubic-bezier(.2,.8,.2,1); position: relative; cursor: default;
+  }
+  .bc-bar:hover { filter: brightness(1.15); }
+  .bc-val { font-size: 14px; font-weight: 600; color: var(--text-primary); text-align: left; padding-left: 12px; font-variant-numeric: tabular-nums; }
+  .bc-baseline { position: absolute; left: 0; top: -6px; bottom: -6px; width: 1px; background: var(--baseline); }
+  .legend { display: flex; gap: 18px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--grid); flex-wrap: wrap; }
+  .legend .key { display: flex; gap: 7px; align-items: center; font-size: 12.5px; color: var(--text-secondary); }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* race */
+  .race-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  select, button, input[type=text] {
+    background: #111110; color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 13px; font: inherit; font-size: 14px;
+  }
+  select { min-width: 320px; }
+  button.primary { background: var(--text-primary); color: #0d0d0d; font-weight: 600; border: none; cursor: pointer; }
+  button.primary:hover { opacity: .88; }
+  button:disabled { opacity: .45; cursor: wait; }
+  .qbox {
+    font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: #111110; border: 1px solid var(--grid); border-radius: 8px;
+    padding: 12px 14px; color: var(--text-secondary); white-space: pre-wrap; margin-bottom: 18px;
+  }
+  .qbox b { color: var(--text-primary); font-weight: 600; }
+  .racegrid { display: grid; grid-template-columns: 210px 1fr 110px; row-gap: 18px; align-items: center; }
+  .race-note { font-size: 12.5px; color: var(--text-muted); margin-top: 14px; }
+
+  /* results table */
+  table { border-collapse: collapse; width: 100%; margin-top: 18px; }
+  th { text-align: left; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; padding: 8px 12px; border-bottom: 1px solid var(--baseline); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--grid); font-size: 13.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  td:first-child { color: var(--text-primary); }
+
+  /* search */
+  .search-row { display: flex; gap: 10px; margin-bottom: 16px; }
+  .search-row input { flex: 1; }
+  .hit { padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .hit .msg { font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-secondary); }
+  .hit .msg em { background: rgba(25,158,112,.25); color: #7ee0b8; font-style: normal; padding: 1px 3px; border-radius: 3px; }
+  .hit .meta { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .search-stats { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .search-stats b { color: var(--text-primary); }
+
+  /* how it works */
+  .modes3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .modecard h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .modecard p { font-size: 13.5px; color: var(--text-secondary); margin-top: 10px; }
+  .modecard .tag { font-size: 11.5px; font-weight: 600; color: var(--text-muted); letter-spacing: .5px; margin-top: 12px; display: block; }
+  .modecard code { font-size: 12px; color: var(--text-secondary); background: #111110; padding: 2px 6px; border-radius: 5px; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: #232322; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 11px; font-size: 12.5px; color: var(--text-primary);
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  }
+  .tooltip .t2 { color: var(--text-secondary); }
+  @media (max-width: 880px) {
+    .tiles, .modes3 { grid-template-columns: 1fr 1fr; }
+    .barchart, .racegrid { grid-template-columns: 130px 1fr 90px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">
+    <span class="logo">Elastic</span>
+    <span class="badge tp">Columnar Logs / Metrics · Technical Preview</span>
+    <span class="badge">GA in 9.6</span>
+    <span class="badge" id="ver">connecting…</span>
+  </div>
+  <h1>Columnar Logs <em style="font-style:normal;color:var(--mode-columnar)">/</em> Metrics. One cluster for analytics <em style="font-style:normal;color:var(--mode-columnar)">and</em> search.</h1>
+  <p class="sub">Columnar storage used to mean a second system — ClickHouse, BigQuery, Redshift — beside your search cluster.
+  With <b>Columnar Mode</b>, Elasticsearch stores each field once as columns, drops the inverted index where you don't need it,
+  and keeps it where you do. Same data, same APIs, meaningfully smaller footprint.</p>
+  <p class="cluster">Live against <code id="hdr-endpoint">your Elasticsearch project</code> · <span id="hdr-docs">60,000</span> identical NetOps firewall logs ingested into each of three index modes</p>
+</header>
+
+<section>
+  <div class="sec-label">At a glance</div>
+  <div class="tiles">
+    <div class="card tile">
+      <div class="label">Storage saved vs standard</div>
+      <div class="value hero" id="t-saved">—</div>
+      <div class="delta" id="t-saved-note"></div>
+    </div>
+    <div class="card tile">
+      <div class="label">Documents per index</div>
+      <div class="value" id="t-docs">—</div>
+      <div class="note">identical copies, 3 modes</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Columnar footprint</div>
+      <div class="value" id="t-col">—</div>
+      <div class="note" id="t-col-note">index.mode: logsdb_columnar</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Standard footprint</div>
+      <div class="value" id="t-std">—</div>
+      <div class="note">index.mode: standard</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-label"><span style="color:var(--mode-columnar)">Columnar Logs</span> · storage footprint — same <span id="sec-docs">60,000</span> log docs, three modes</div>
+  <div class="card">
+    <div class="barchart" id="storage-chart">
+      <div style="grid-column:1/4;color:var(--text-muted);font-size:13px">Loading live index stats…</div>
+    </div>
+    <div class="legend" id="storage-legend"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-label"><span style="color:var(--mode-columnar)">Columnar Logs</span> · analytics query race — identical ES|QL, per mode</div>
+  <div class="card">
+    <div class="race-controls">
+      <select id="q-select"></select>
+      <button class="primary" id="q-run">Run race</button>
+    </div>
+    <div class="qbox" id="q-show"></div>
+    <div class="racegrid" id="race-chart"></div>
+    <div class="race-note" id="race-note"></div>
+    <div id="race-results"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-label"><span style="color:var(--mode-columnar)">Columnar Metrics</span> · the new Metrics engine — fully columnar TSDS + ES|QL</div>
+  <div class="card" style="margin-bottom:14px">
+    <p style="color:var(--text-secondary);font-size:13.5px">
+      TSDS and the ES|QL compute engine were rebuilt into a <b style="color:var(--text-primary)">fully columnar metrics engine</b> —
+      up to 160× faster time-series queries, ~3–4 bytes per data point, native OTLP and Prometheus Remote Write ingest.
+      Below: 24h of interface counters &amp; gauges from 15 firewalls (30 time series, 30s resolution), queried live with the new
+      <code style="background:#111110;padding:1px 5px;border-radius:4px">TS</code> command.
+    </p>
+  </div>
+  <div class="tiles" style="margin-bottom:14px">
+    <div class="card tile">
+      <div class="label">Data points stored</div>
+      <div class="value" id="m-points">—</div>
+      <div class="note">counters + gauges, 30s resolution</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Bytes per data point</div>
+      <div class="value" id="m-bpp">—</div>
+      <div class="note">TSDS columnar layout</div>
+    </div>
+    <div class="card tile">
+      <div class="label">TSDS vs standard index</div>
+      <div class="value" id="m-saved">—</div>
+      <div class="note" id="m-saved-note">same 86,400 docs</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Last TS query</div>
+      <div class="value" id="m-took">—</div>
+      <div class="note" id="m-took-note">across all samples</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <div style="font-size:14px;font-weight:600">Interface throughput — counter <code style="background:#111110;padding:1px 5px;border-radius:4px">RATE()</code> per host, 30-min buckets</div>
+      <div style="font-size:12px;color:var(--text-muted)">top 3 hosts by traffic · watch the <span style="color:var(--mode-columnar)">fw-iad-03</span> surge</div>
+    </div>
+    <div id="ts-chart" style="margin-top:14px"><div style="color:var(--text-muted);font-size:13px">Loading time series…</div></div>
+    <div class="legend" id="ts-legend"></div>
+  </div>
+  <div class="card">
+    <div class="race-controls">
+      <select id="m-select"></select>
+      <button class="primary" id="m-run">Run TS query</button>
+    </div>
+    <div class="qbox" id="m-show"></div>
+    <div id="m-results"></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      <div style="font-size:14px;font-weight:600">Native Prometheus &amp; PromQL <span class="badge" style="color:var(--mode-columnar);border-color:rgba(25,158,112,.4);margin-left:6px">GA</span></div>
+      <div style="font-size:12px;color:var(--text-muted)">remote-write live on this cluster: <code style="background:#111110;padding:1px 5px;border-radius:4px">POST /_prometheus/api/v1/write</code></div>
+    </div>
+    <p style="color:var(--text-secondary);font-size:13.5px;margin-bottom:14px">
+      The same TSDS data, queried in <b style="color:var(--text-primary)">native PromQL</b> — run inside Elasticsearch by the ES|QL engine.
+      Teams keep their Grafana dashboards, alerts, and years of PromQL muscle memory; the migration tool moves them over, no rewrites.
+    </p>
+    <div class="race-controls">
+      <select id="p-select"></select>
+      <button class="primary" id="p-run">Run PromQL</button>
+    </div>
+    <div class="qbox" id="p-show"></div>
+    <div id="p-results"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-label"><span style="color:var(--mode-columnar)">Columnar Logs</span> · full-text search — still first class</div>
+  <div class="card">
+    <p style="color:var(--text-secondary);font-size:13.5px;margin-bottom:14px">
+      Columnar Logs keeps one inverted index — on <code style="background:#111110;padding:1px 5px;border-radius:4px">message</code> —
+      so operators still get instant full‑text search over the same columnar data. This queries the <b>columnar</b> index directly.
+    </p>
+    <div class="search-row">
+      <input type="text" id="s-input" value="DENY ssh" placeholder="Search log messages… e.g. DENY ssh, geo-block, policy-violation">
+      <button class="primary" id="s-run">Search</button>
+    </div>
+    <div class="search-stats" id="s-stats"></div>
+    <div id="s-hits"></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-label">How the three modes differ</div>
+  <div class="modes3">
+    <div class="card modecard">
+      <h3><span class="swatch" style="background:var(--mode-standard)"></span>Standard</h3>
+      <p>Every field is stored several ways at once — inverted index, doc values, stored fields — so any query pattern is fast. Great default; heaviest footprint.</p>
+      <span class="tag">SETTING</span>
+      <code>index.mode: standard</code>
+    </div>
+    <div class="card modecard">
+      <h3><span class="swatch" style="background:var(--mode-logsdb)"></span>LogsDB</h3>
+      <p>Log-optimized: index sorting, synthetic <code>_source</code>, ZSTD + delta encoding. Up to 65% smaller than standard. GA since 8.17, default for serverless logs.</p>
+      <span class="tag">SETTING</span>
+      <code>index.mode: logsdb</code>
+    </div>
+    <div class="card modecard">
+      <h3><span class="swatch" style="background:var(--mode-columnar)"></span>Columnar Logs</h3>
+      <p>Fields stored <b>once</b>, as columns — no inverted index except on <code>message</code>. Column scans for analytics, full‑text where it matters. GA in 9.6.</p>
+      <span class="tag">SETTING</span>
+      <code>index.mode: logsdb_columnar</code>
+    </div>
+  </div>
+</section>
+
+</div>
+<div class="tooltip" id="tt"></div>
+
+<script>
+const MODE_META = {
+  "netops-cmp-standard": { label: "Standard",      mode: "standard",        color: "var(--mode-standard)" },
+  "netops-cmp-logsdb":   { label: "LogsDB",        mode: "logsdb",          color: "var(--mode-logsdb)" },
+  "netops-cmp-columnar": { label: "Columnar Logs", mode: "logsdb_columnar", color: "var(--mode-columnar)" },
+};
+const fmtB = (b) => b >= 1<<30 ? (b/(1<<30)).toFixed(2)+" GB" : b >= 1<<20 ? (b/(1<<20)).toFixed(1)+" MB" : b >= 1024 ? (b/1024).toFixed(1)+" KB" : b+" B";
+const fmtN = (n) => Number(n).toLocaleString("en-US");
+const $ = (id) => document.getElementById(id);
+
+const tt = $("tt");
+function bindTooltip(el, html) {
+  el.addEventListener("mousemove", (e) => {
+    tt.innerHTML = html; tt.style.display = "block";
+    tt.style.left = Math.min(e.clientX + 14, innerWidth - 240) + "px";
+    tt.style.top = (e.clientY + 14) + "px";
+  });
+  el.addEventListener("mouseleave", () => (tt.style.display = "none"));
+}
+
+/* ---------- overview / storage chart ---------- */
+let settleTimer = null;
+async function loadOverview() {
+  const r = await fetch("/api/overview").then((r) => r.json());
+  $("ver").textContent = "Elasticsearch " + (r.version || "?") + " serverless";
+  const rows = r.rows.filter((x) => MODE_META[x.index]);
+  const std = rows.find((x) => x.index === "netops-cmp-standard");
+  const col = rows.find((x) => x.index === "netops-cmp-columnar");
+  const settled = rows.every((x) => x.bytes > 10000);
+
+  $("t-docs").textContent = std ? fmtN(std.docs) : "—";
+  if (std) $("hdr-docs").textContent = $("sec-docs").textContent = fmtN(std.docs);
+  if (r.endpoint) $("hdr-endpoint").textContent = r.endpoint;
+  if (settled && std && col) {
+    const saved = 100 * (1 - col.bytes / std.bytes);
+    $("t-saved").textContent = saved.toFixed(0) + "%";
+    $("t-saved-note").textContent = "↓ " + fmtB(std.bytes - col.bytes) + " on this dataset";
+    $("t-col").textContent = fmtB(col.bytes);
+    $("t-std").textContent = fmtB(std.bytes);
+  } else {
+    $("t-saved").textContent = "…";
+    $("t-saved-note").textContent = "object-store stats settling — auto-refreshing";
+  }
+
+  const max = Math.max(...rows.map((x) => x.bytes), 1);
+  const chart = $("storage-chart");
+  chart.innerHTML = "";
+  for (const x of rows) {
+    const m = MODE_META[x.index];
+    const name = document.createElement("div");
+    name.className = "bc-name";
+    name.innerHTML = m.label + '<span class="bc-mode">index.mode: ' + m.mode + "</span>";
+    const track = document.createElement("div");
+    track.className = "bc-track";
+    track.innerHTML = '<div class="bc-baseline"></div>';
+    const bar = document.createElement("div");
+    bar.className = "bc-bar";
+    bar.style.background = m.color;
+    bar.style.width = "0%";
+    requestAnimationFrame(() => (bar.style.width = Math.max(0.5, (100 * x.bytes) / max) + "%"));
+    bindTooltip(bar, "<b>" + m.label + "</b><div class='t2'>" + fmtB(x.bytes) + " · " + fmtN(x.docs) + " docs</div>");
+    track.appendChild(bar);
+    const val = document.createElement("div");
+    val.className = "bc-val";
+    val.textContent = x.bytes > 10000 ? fmtB(x.bytes) : "settling…";
+    chart.append(name, track, val);
+  }
+  $("storage-legend").innerHTML = rows.map((x) => {
+    const m = MODE_META[x.index];
+    return '<span class="key"><span class="swatch" style="background:' + m.color + '"></span>' + m.label + " · " + fmtN(x.docs) + " docs</span>";
+  }).join("");
+
+  if (!settled) settleTimer = setTimeout(loadOverview, 8000);
+  else if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+}
+
+/* ---------- ES|QL race ---------- */
+const QUERIES = [
+  { name: "Top talkers by bytes transferred",
+    q: 'FROM $INDEX\n| STATS total_bytes = SUM(network.bytes), sessions = COUNT(*) BY source.ip\n| SORT total_bytes DESC\n| LIMIT 10' },
+  { name: "Firewall denies by rule",
+    q: 'FROM $INDEX\n| WHERE event.action == "deny"\n| STATS denies = COUNT(*) BY rule.name\n| SORT denies DESC' },
+  { name: "Hourly traffic volume (24h)",
+    q: 'FROM $INDEX\n| STATS mb = ROUND(SUM(network.bytes) / 1048576.0, 1) BY hour = BUCKET(@timestamp, 1 hour)\n| SORT hour\n| LIMIT 24' },
+  { name: "p95 session duration by protocol",
+    q: 'FROM $INDEX\n| STATS p95_us = PERCENTILE(event.duration, 95), sessions = COUNT(*) BY network.protocol\n| SORT p95_us DESC' },
+  { name: "Severity × action breakdown",
+    q: 'FROM $INDEX\n| STATS events = COUNT(*) BY log.level, event.action\n| SORT events DESC\n| LIMIT 12' },
+  { name: "Heaviest log sources (event.original_size)",
+    q: 'FROM $INDEX\n| STATS ingest_mb = ROUND(SUM(event.original_size) / 1048576.0, 2), avg_bytes = ROUND(AVG(event.original_size), 0) BY host.name\n| SORT ingest_mb DESC\n| LIMIT 10' },
+];
+const sel = $("q-select");
+QUERIES.forEach((q, i) => sel.append(new Option(q.name, i)));
+function showQuery() { $("q-show").innerHTML = QUERIES[sel.value].q.replace("$INDEX", "<b>&lt;index&gt;</b>"); }
+sel.onchange = showQuery; showQuery();
+
+async function runRace() {
+  const btn = $("q-run");
+  btn.disabled = true; btn.textContent = "Racing…";
+  $("race-chart").innerHTML = '<div style="grid-column:1/4;color:var(--text-muted);font-size:13px">Running the same query against all three modes (warm run measured)…</div>';
+  $("race-results").innerHTML = ""; $("race-note").textContent = "";
+  try {
+    const out = await fetch("/api/race", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ query: QUERIES[sel.value].q }) }).then((r) => r.json());
+    const max = Math.max(...out.map((x) => x.ms));
+    const chart = $("race-chart");
+    chart.innerHTML = "";
+    for (const x of out) {
+      const m = MODE_META[x.index];
+      const name = document.createElement("div");
+      name.className = "bc-name";
+      name.innerHTML = m.label + '<span class="bc-mode">index.mode: ' + m.mode + "</span>";
+      const track = document.createElement("div");
+      track.className = "bc-track";
+      track.innerHTML = '<div class="bc-baseline"></div>';
+      const bar = document.createElement("div");
+      bar.className = "bc-bar";
+      bar.style.background = m.color;
+      bar.style.width = "0%";
+      requestAnimationFrame(() => (bar.style.width = Math.max(1, (100 * x.ms) / max) + "%"));
+      bindTooltip(bar, "<b>" + m.label + "</b><div class='t2'>" + x.ms + " ms round-trip (warm)</div>");
+      track.appendChild(bar);
+      const val = document.createElement("div");
+      val.className = "bc-val";
+      val.textContent = x.error ? "error" : x.ms + " ms";
+      chart.append(name, track, val);
+    }
+    $("race-note").textContent = "Round-trip latency incl. network, second (warm) run. Same result set from every mode — storage layout changes, answers don't.";
+    const colr = out.find((x) => x.index === "netops-cmp-columnar");
+    if (colr && colr.columns) {
+      const cols = colr.columns.map((c) => c.name);
+      $("race-results").innerHTML =
+        "<table><thead><tr>" + cols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" +
+        colr.values.slice(0, 10).map((row) =>
+          "<tr>" + row.map((v) => "<td>" + (v === null ? "—" : typeof v === "number" ? fmtN(v) : v) + "</td>").join("") + "</tr>"
+        ).join("") + "</tbody></table>" +
+        '<div class="race-note">Result rows served from the Columnar Logs index.</div>';
+    }
+  } catch (e) {
+    $("race-note").textContent = "Race failed: " + e;
+  }
+  btn.disabled = false; btn.textContent = "Run race";
+}
+$("q-run").onclick = runRace;
+
+/* ---------- metrics engine ---------- */
+async function loadMetricsOverview() {
+  const r = await fetch("/api/metrics-overview").then((r) => r.json());
+  const tsds = r.rows.find((x) => x.index === "netops-cmp-metrics");
+  const std = r.rows.find((x) => x.index === "netops-cmp-metrics-standard");
+  if (!tsds) return;
+  $("m-points").textContent = fmtN(tsds.dataPoints);
+  if (tsds.bytes > 10000) {
+    $("m-bpp").textContent = (tsds.bytes / tsds.dataPoints).toFixed(1) + " B";
+    if (std && std.bytes > 10000) {
+      $("m-saved").textContent = (100 * (1 - tsds.bytes / std.bytes)).toFixed(0) + "% smaller";
+      $("m-saved-note").textContent = fmtB(tsds.bytes) + " vs " + fmtB(std.bytes) +
+        (tsds.stale || std.stale ? " · last measured" : "");
+    }
+    if (tsds.stale || (std && std.stale)) setTimeout(loadMetricsOverview, 8000);
+  } else {
+    $("m-bpp").textContent = "…";
+    setTimeout(loadMetricsOverview, 8000);
+  }
+}
+
+const SERIES_COLORS = ["var(--mode-standard)", "var(--mode-logsdb)", "var(--mode-columnar)"];
+async function loadTsChart() {
+  const q = 'TS netops-cmp-metrics | STATS gbps = SUM(RATE(network.in_bytes)) * 8 / 1e9 BY host.name, t = TBUCKET(30 minutes) | SORT t | LIMIT 1000';
+  const r = await fetch("/api/esql", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ query: q }) }).then((r) => r.json());
+  if (!r.values) { $("ts-chart").innerHTML = '<div style="color:var(--text-muted);font-size:13px">Query failed.</div>'; return; }
+  $("m-took").textContent = r.ms + " ms";
+  $("m-took-note").textContent = fmtN(r.documents_found || 0) + " docs scanned";
+  // group by host, pick top 3 by total
+  const byHost = {};
+  for (const [gbps, host, t] of r.values) {
+    (byHost[host] = byHost[host] || []).push({ t: +new Date(t), v: gbps });
+  }
+  const top = Object.entries(byHost)
+    .map(([h, pts]) => ({ h, pts: pts.sort((a, b) => a.t - b.t), sum: pts.reduce((s, p) => s + p.v, 0) }))
+    .sort((a, b) => b.sum - a.sum).slice(0, 3);
+
+  const W = 980, H = 260, L = 46, R = 12, T = 12, B = 26;
+  const allPts = top.flatMap((s) => s.pts);
+  const x0 = Math.min(...allPts.map((p) => p.t)), x1 = Math.max(...allPts.map((p) => p.t));
+  const y1 = Math.max(...allPts.map((p) => p.v)) * 1.08;
+  const X = (t) => L + (W - L - R) * (t - x0) / (x1 - x0);
+  const Y = (v) => T + (H - T - B) * (1 - v / y1);
+  const yticks = 4;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" id="ts-svg">`;
+  for (let i = 0; i <= yticks; i++) {
+    const v = (y1 * i) / yticks, y = Y(v);
+    svg += `<line x1="${L}" y1="${y}" x2="${W - R}" y2="${y}" stroke="#2c2c2a" stroke-width="1"/>`;
+    svg += `<text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#898781" style="font-variant-numeric:tabular-nums">${v.toFixed(2)}</text>`;
+  }
+  const hours = 6;
+  for (let t = x0; t <= x1; t += hours * 3600e3) {
+    svg += `<text x="${X(t)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#898781">${new Date(t).toTimeString().slice(0, 5)}</text>`;
+  }
+  svg += `<text x="${L - 34}" y="${T + 2}" font-size="11" fill="#898781" transform="rotate(-90 ${L - 34} ${T + 2})" text-anchor="end">Gbit/s</text>`;
+  top.forEach((s, i) => {
+    const d = s.pts.map((p, j) => (j ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.v).toFixed(1)).join(" ");
+    svg += `<path d="${d}" fill="none" stroke="${SERIES_COLORS[i]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  svg += `<line id="ts-cross" x1="0" y1="${T}" x2="0" y2="${H - B}" stroke="#52514e" stroke-width="1" style="display:none"/>`;
+  top.forEach((s, i) => {
+    svg += `<circle id="ts-dot-${i}" r="4.5" fill="${SERIES_COLORS[i]}" stroke="#1a1a19" stroke-width="2" style="display:none"/>`;
+  });
+  svg += `</svg>`;
+  $("ts-chart").innerHTML = svg;
+  $("ts-legend").innerHTML = top.map((s, i) =>
+    `<span class="key"><span class="swatch" style="background:${SERIES_COLORS[i]}"></span>${s.h}</span>`).join("") +
+    `<span class="key" style="margin-left:auto;color:var(--text-muted)">SUM(RATE(network.in_bytes)) · TBUCKET(30 minutes)</span>`;
+
+  const el = document.getElementById("ts-svg");
+  el.addEventListener("mousemove", (e) => {
+    const box = el.getBoundingClientRect();
+    const t = x0 + (x1 - x0) * Math.min(1, Math.max(0, ((e.clientX - box.left) / box.width * W - L) / (W - L - R)));
+    let html = "<b>" + new Date(t).toTimeString().slice(0, 5) + "</b>";
+    const cross = document.getElementById("ts-cross");
+    cross.style.display = "block";
+    top.forEach((s, i) => {
+      let best = s.pts[0];
+      for (const p of s.pts) if (Math.abs(p.t - t) < Math.abs(best.t - t)) best = p;
+      cross.setAttribute("x1", X(best.t)); cross.setAttribute("x2", X(best.t));
+      const dot = document.getElementById("ts-dot-" + i);
+      dot.setAttribute("cx", X(best.t)); dot.setAttribute("cy", Y(best.v)); dot.style.display = "block";
+      html += `<div class='t2'>${s.h}: ${best.v.toFixed(3)} Gbit/s</div>`;
+    });
+    tt.innerHTML = html; tt.style.display = "block";
+    tt.style.left = Math.min(e.clientX + 14, innerWidth - 240) + "px";
+    tt.style.top = (e.clientY + 14) + "px";
+  });
+  el.addEventListener("mouseleave", () => {
+    tt.style.display = "none";
+    document.getElementById("ts-cross").style.display = "none";
+    top.forEach((_, i) => (document.getElementById("ts-dot-" + i).style.display = "none"));
+  });
+}
+
+const TS_QUERIES = [
+  { name: "Busiest hosts — counter rate, whole window",
+    q: 'TS netops-cmp-metrics\n| STATS mbps = ROUND(SUM(RATE(network.in_bytes)) * 8 / 1e6, 1) BY host.name\n| SORT mbps DESC\n| LIMIT 10' },
+  { name: "Surge detection — max 30-min throughput per host",
+    q: 'TS netops-cmp-metrics\n| STATS gbps = SUM(RATE(network.in_bytes)) * 8 / 1e9 BY host.name, t = TBUCKET(30 minutes)\n| STATS peak_gbps = ROUND(MAX(gbps), 2) BY host.name\n| SORT peak_gbps DESC\n| LIMIT 5' },
+  { name: "CPU by host — gauge AVG_OVER_TIME, hourly",
+    q: 'TS netops-cmp-metrics\n| STATS cpu_pct = ROUND(AVG(AVG_OVER_TIME(cpu.utilization)) * 100, 1) BY host.name, t = TBUCKET(1 hour)\n| SORT cpu_pct DESC\n| LIMIT 12' },
+  { name: "Per-interface egress rate",
+    q: 'TS netops-cmp-metrics\n| STATS out_mbps = ROUND(SUM(RATE(network.out_bytes)) * 8 / 1e6, 1) BY host.name, interface.name\n| SORT out_mbps DESC\n| LIMIT 10' },
+  { name: "Traffic by datacenter — LOOKUP JOIN enrichment",
+    q: 'TS netops-cmp-metrics\n| STATS mbps = ROUND(SUM(RATE(network.in_bytes)) * 8 / 1e6, 1) BY host.name\n| LOOKUP JOIN netops-host-lookup ON host.name\n| STATS total_mbps = ROUND(SUM(mbps), 1), hosts = COUNT(host.name) BY datacenter, environment, owner\n| SORT total_mbps DESC' },
+];
+const msel = $("m-select");
+TS_QUERIES.forEach((q, i) => msel.append(new Option(q.name, i)));
+function showTsQuery() { $("m-show").textContent = TS_QUERIES[msel.value].q; }
+msel.onchange = showTsQuery; showTsQuery();
+
+async function runTsQuery() {
+  const btn = $("m-run");
+  btn.disabled = true; btn.textContent = "Running…";
+  try {
+    const r = await fetch("/api/esql", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ query: TS_QUERIES[msel.value].q }) }).then((r) => r.json());
+    if (r.columns) {
+      $("m-took").textContent = r.ms + " ms";
+      $("m-took-note").textContent = fmtN(r.documents_found || 0) + " docs scanned";
+      const cols = r.columns.map((c) => c.name);
+      $("m-results").innerHTML =
+        "<table><thead><tr>" + cols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" +
+        r.values.slice(0, 12).map((row) =>
+          "<tr>" + row.map((v) => "<td>" + (v === null ? "—" : typeof v === "number" ? fmtN(v) : String(v).replace("T", " ").slice(0, 16)) + "</td>").join("") + "</tr>"
+        ).join("") + "</tbody></table>";
+    } else {
+      $("m-results").innerHTML = '<div style="color:var(--text-muted);font-size:13px;margin-top:10px">Query failed: ' + JSON.stringify(r).slice(0, 200) + "</div>";
+    }
+  } catch (e) { $("m-results").textContent = "Error: " + e; }
+  btn.disabled = false; btn.textContent = "Run TS query";
+}
+$("m-run").onclick = runTsQuery;
+
+/* ---------- native PromQL ---------- */
+const PROMQL_QUERIES = [
+  { name: "Top 3 talkers — topk() finds the surge",
+    q: 'PROMQL index=netops-cmp-metrics step=1h\n  topk(3, sum by (host.name) (rate(network.in_bytes[1h])))' },
+  { name: "Per-host ingress rate (Grafana panel query)",
+    q: 'PROMQL index=netops-cmp-metrics step=1h\n  sum by (host.name) (rate(network.in_bytes[1h]))' },
+  { name: "CPU by host — gauge avg",
+    q: 'PROMQL index=netops-cmp-metrics step=1h\n  avg by (host.name) (cpu.utilization)' },
+  { name: "Lookup table — PromQL piped into LOOKUP JOIN",
+    q: 'PROMQL index=netops-cmp-metrics step=24h\n  sum by (host.name) (rate(network.in_bytes[1h]))\n| RENAME `sum by (host.name) (rate(network.in_bytes[1h]))` AS bps\n| LOOKUP JOIN netops-host-lookup ON host.name\n| STATS mbps = ROUND(SUM(bps) * 8 / 1e6, 1) BY datacenter, environment\n| SORT mbps DESC' },
+];
+const psel = $("p-select");
+PROMQL_QUERIES.forEach((q, i) => psel.append(new Option(q.name, i)));
+function showPromql() { $("p-show").textContent = PROMQL_QUERIES[psel.value].q; }
+psel.onchange = showPromql; showPromql();
+
+async function runPromql() {
+  const btn = $("p-run");
+  btn.disabled = true; btn.textContent = "Running…";
+  try {
+    const r = await fetch("/api/esql", { method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ query: PROMQL_QUERIES[psel.value].q.replace(/\n\s*/g, " ") }) }).then((r) => r.json());
+    if (r.columns) {
+      const cols = r.columns.map((c) => c.name);
+      $("p-results").innerHTML =
+        '<div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">' + r.ms + " ms · " + fmtN(r.documents_found || 0) + " docs scanned · executed by the ES|QL engine</div>" +
+        "<table><thead><tr>" + cols.map((c) => "<th>" + c + "</th>").join("") + "</tr></thead><tbody>" +
+        r.values.slice(0, 10).map((row) =>
+          "<tr>" + row.map((v) => "<td>" + (v === null ? "—" : typeof v === "number" ? fmtN(Math.round(v)) : String(v).replace("T", " ").slice(0, 16)) + "</td>").join("") + "</tr>"
+        ).join("") + "</tbody></table>";
+    } else {
+      $("p-results").innerHTML = '<div style="color:var(--text-muted);font-size:13px;margin-top:10px">Query failed: ' + JSON.stringify(r).slice(0, 200) + "</div>";
+    }
+  } catch (e) { $("p-results").textContent = "Error: " + e; }
+  btn.disabled = false; btn.textContent = "Run PromQL";
+}
+$("p-run").onclick = runPromql;
+
+loadMetricsOverview();
+loadTsChart();
+
+/* ---------- full-text search ---------- */
+async function runSearch() {
+  const q = $("s-input").value.trim();
+  if (!q) return;
+  $("s-stats").textContent = "Searching…";
+  const r = await fetch("/api/search?q=" + encodeURIComponent(q)).then((r) => r.json());
+  $("s-stats").innerHTML = "<b>" + fmtN(r.total) + "</b> matches in <b>" + r.ms + " ms</b> — full-text over the columnar index";
+  $("s-hits").innerHTML = (r.hits || []).map((h) =>
+    '<div class="hit"><div class="msg">' + h.highlight + "</div>" +
+    '<div class="meta">' + new Date(h.src["@timestamp"]).toISOString() + " · " + h.src.host + " · action=" + h.src.action + " · rule=" + h.src.rule + "</div></div>"
+  ).join("") || '<div style="color:var(--text-muted);font-size:13px;padding:12px 0">No matches.</div>';
+}
+$("s-run").onclick = runSearch;
+$("s-input").addEventListener("keydown", (e) => e.key === "Enter" && runSearch());
+
+loadOverview();
+</script>
+</body>
+</html>
