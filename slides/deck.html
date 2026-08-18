@@ -52,6 +52,13 @@
   .flow .step .num { font-size: 13px; font-weight: 700; color: var(--green); letter-spacing: 1px; }
   .flow .step p { font-size: 15px; color: var(--ink2); margin-top: 6px; }
   .progress { position: fixed; bottom: 0; left: 0; height: 3px; background: var(--green); transition: width .25s; }
+  /* ?print → all slides paginated for PDF export */
+  @page { size: 13.333in 7.5in; margin: 0; }
+  body.print { overflow: visible; height: auto; }
+  body.print .slide { display: flex; position: relative; inset: auto; height: 100vh;
+                      break-after: page; page-break-after: always; }
+  body.print .foot, body.print .progress { display: none; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
@@ -238,8 +245,14 @@
 
 <script>
 const slides = [...document.querySelectorAll(".slide")];
+const printMode = new URLSearchParams(location.search).has("print");
+if (printMode) {
+  document.body.classList.add("print");
+  slides.forEach((s) => s.classList.add("active"));
+}
 let cur = 0;
 function show(i) {
+  if (printMode) return;
   cur = Math.max(0, Math.min(slides.length - 1, i));
   slides.forEach((s, j) => s.classList.toggle("active", j === cur));
   document.getElementById("pg").textContent = (cur + 1) + " / " + slides.length;

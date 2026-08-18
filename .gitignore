@@ -23,3 +23,6 @@ data/synth_apm_metrics.py
 # python bytecode
 __pycache__/
 *.pyc
+
+# generated exports
+slides/*.pdf
