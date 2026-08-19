@@ -137,7 +137,7 @@ const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css
 
 http.createServer(async (req, res) => {
   const send = (code, obj, type = "application/json") => {
-    res.writeHead(code, { "Content-Type": type });
+    res.writeHead(code, { "Content-Type": type, "Access-Control-Allow-Origin": "*" });
     res.end(type === "application/json" ? JSON.stringify(obj) : obj);
   };
   try {

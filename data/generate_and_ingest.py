@@ -12,10 +12,15 @@ import gzip
 import json
 import os
 import random
+import ssl
 import sys
 import time
 import urllib.request
 import uuid
+
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 EP = os.environ.get("ES_ENDPOINT", "").rstrip("/")
@@ -252,7 +257,7 @@ def req(method, path, body=None, ndjson=False):
             data = json.dumps(body).encode()
     r = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(r, timeout=180) as resp:
+        with urllib.request.urlopen(r, timeout=180, context=_SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         return {"_http_error": e.code, "body": e.read().decode()[:500]}

@@ -212,17 +212,16 @@
   <p class="kicker">One setting at index creation. That is the entire adoption surface.</p>
 </section>
 
-<!-- 7 · Live demo -->
+<!-- 9 · What we covered -->
 <section class="slide">
-  <div class="eyebrow">Live demo</div>
-  <h2>What you're about to see</h2>
+  <div class="eyebrow">What we covered</div>
+  <h2>What you just saw</h2>
   <div class="flow">
-    <div class="step"><div class="num">01 · FOOTPRINT</div><p>Identical wide-schema firewall logs in three modes — live storage comparison from the running serverless cluster.</p></div>
-    <div class="step"><div class="num">02 · ANALYTICS</div><p>Same ES|QL query raced across all three modes — top talkers, deny rates, p95 durations. Same answers, columnar economics.</p></div>
-    <div class="step"><div class="num">03 · METRICS</div><p>345k data points on the new TSDS engine — counter RATE() charted live, surge on fw-iad-03 visible, then the same data queried in native PromQL.</p></div>
-    <div class="step"><div class="num">04 · SEARCH</div><p>Full-text search with highlighting over the <i>columnar</i> index — the part warehouses can't do.</p></div>
+    <div class="step"><div class="num">01 · FOOTPRINT</div><p>150k identical firewall logs in three index modes — 84% smaller on columnar vs standard, measured live on this cluster.</p></div>
+    <div class="step"><div class="num">02 · METRICS</div><p>86k data points on the new columnar TSDS engine — throughput charted live, fw-iad-03 surge visible, same data queried in native PromQL.</p></div>
+    <div class="step"><div class="num">03 · SEARCH</div><p>Full-text search with highlighting over the columnar index — logs and metrics in the same cluster, no context switch.</p></div>
+    <div class="step"><div class="num">04 · AI AGENT</div><p>NetOps Assistant reasoning across metrics, logs, and capacity data — one question, multiple tools, same cluster throughout.</p></div>
   </div>
-  <p class="kicker">Demo interface → <span class="code" style="color:var(--ink)">http://localhost:8787</span> · cluster: <span class="code" id="cluster-note">Elasticsearch serverless</span></p>
 </section>
 
 <!-- 8 · Takeaways -->
