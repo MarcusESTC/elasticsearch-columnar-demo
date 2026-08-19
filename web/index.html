@@ -384,8 +384,8 @@ async function loadOverview() {
 const QUERIES = [
   { name: "Top talkers by bytes transferred",
     q: 'FROM $INDEX\n| STATS total_bytes = SUM(network.bytes), sessions = COUNT(*) BY source.ip\n| SORT total_bytes DESC\n| LIMIT 10' },
-  { name: "Firewall denies by rule",
-    q: 'FROM $INDEX\n| WHERE event.action == "deny"\n| STATS denies = COUNT(*) BY rule.name\n| SORT denies DESC' },
+  { name: "Bandwidth stats by transport",
+    q: 'FROM $INDEX\n| STATS total_mb = ROUND(SUM(network.bytes) / 1048576.0, 1), avg_bytes = ROUND(AVG(network.bytes), 0), p95_bytes = PERCENTILE(network.bytes, 95), sessions = COUNT(*) BY network.transport\n| SORT total_mb DESC' },
   { name: "Hourly traffic volume (24h)",
     q: 'FROM $INDEX\n| STATS mb = ROUND(SUM(network.bytes) / 1048576.0, 1) BY hour = BUCKET(@timestamp, 1 hour)\n| SORT hour\n| LIMIT 24' },
   { name: "p95 session duration by protocol",

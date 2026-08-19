@@ -92,6 +92,23 @@ browser.
   matching (`group_left`) isn't supported yet — pipe into ES|QL `LOOKUP JOIN`
   instead (it's a better story anyway).
 
+## Query race — what columnar wins (and doesn't)
+
+Columnar Logs drops the inverted index in favour of doc-values-only storage.
+That means:
+
+| Query pattern | Standard / LogsDB | Columnar Logs |
+|---|---|---|
+| `WHERE keyword == "value"` (filter) | ✅ Fast — inverted index lookup | ⚠️ Slower — full column scan |
+| `STATS SUM/AVG/PERCENTILE(numeric)` | Fine | ✅ Fastest — sequential column read |
+| `STATS COUNT(*) BY keyword` (group-by, no filter) | Fine | ✅ Competitive |
+| Full-text search on `message` | ✅ Inverted index | ✅ Inverted index kept |
+
+The race presets are all chosen to play to columnar's strengths (numeric
+aggregations, no leading keyword filters). If you swap in a query that starts
+with `WHERE some_keyword == "…"`, expect columnar to trail — that trade-off is
+by design, and the storage compression numbers are the payoff.
+
 ## Layout
 
 ```
