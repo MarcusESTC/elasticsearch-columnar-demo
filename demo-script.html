@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Columnar Logs / Metrics — Demo Script</title>
+<style>
+  @page { size: letter; margin: 1in; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 13px/1.6 Georgia, serif; color: #111; max-width: 7in; margin: 0 auto; padding: 40px 0; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .meta { font-size: 12px; color: #555; margin-bottom: 32px; border-bottom: 1px solid #ccc; padding-bottom: 12px; }
+  h2 { font-size: 15px; font-family: system-ui, sans-serif; font-weight: 700; margin: 28px 0 4px;
+       text-transform: uppercase; letter-spacing: .6px; color: #333; border-top: 2px solid #111; padding-top: 10px; }
+  h3 { font-size: 13px; font-family: system-ui, sans-serif; font-weight: 700; margin: 18px 0 4px; color: #111; }
+  p { margin: 6px 0; }
+  blockquote { border-left: 3px solid #999; margin: 10px 0 10px 0; padding: 4px 0 4px 14px;
+               font-style: italic; color: #222; }
+  blockquote + blockquote { margin-top: -4px; }
+  .action { font-family: system-ui, sans-serif; font-size: 11.5px; font-weight: 600;
+            background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px;
+            padding: 2px 7px; display: inline-block; margin: 6px 0; }
+  code { font-family: Menlo, monospace; font-size: 12px; background: #f4f4f4;
+         border: 1px solid #ddd; border-radius: 2px; padding: 0 4px; }
+  .timing { font-family: system-ui, sans-serif; font-size: 11px; color: #777; float: right; margin-top: 2px; }
+  .tip { font-size: 11.5px; color: #555; background: #fafafa; border: 1px solid #ddd;
+         border-radius: 3px; padding: 6px 10px; margin: 10px 0; }
+  .tip strong { color: #111; }
+  ul { margin: 6px 0 6px 20px; }
+  li { margin: 3px 0; }
+  @media print {
+    body { padding: 0; }
+    h2 { page-break-before: auto; }
+    blockquote, .action, .tip { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Columnar Logs / Metrics — Demo Script</h1>
+<div class="meta">
+  Elasticsearch 9.6 · ~30 min full / ~15 min cut version<br>
+  Slides: <code>slides/deck.html</code> &nbsp;·&nbsp;
+  Demo UI: <code>http://localhost:8787</code> &nbsp;·&nbsp;
+  Start server: <code>node server/server.js</code>
+</div>
+
+<div class="tip"><strong>Cut version (12 min):</strong> Skip Act 2 (Analytics Race) and Act 4 (Search). Run Slides 1–5 → Act 1 → Slides 6–7 → Act 3 (dashboards only, skip PromQL) → Act 5.</div>
+
+<!-- ============================================================ -->
+<h2>Slides 1–4 &nbsp;<span class="timing">~5 min</span></h2>
+
+<h3>Slide 1 — Title</h3>
+<blockquote>"So what we're looking at today is basically: what happens when you don't need a second system for analytics? Elasticsearch has always been great for search and investigation — the question is whether you also have to run something like ClickHouse or BigQuery next to it for the analytics workloads. This is Elastic's answer to that."</blockquote>
+
+<h3>Slide 2 — The problem</h3>
+<blockquote>"So you're already using Elasticsearch for logs — which means when something goes wrong, you're searching in Kibana. But your metrics are in Grafana, on a separate Prometheus stack. So the actual on-call workflow is: alert fires, you go to Grafana to look at the metric, then you switch to Kibana to look at the logs, and you're manually correlating between two systems with two query languages and two time axes. That friction is the problem this is solving."</blockquote>
+
+<h3>Slide 3 — What's new</h3>
+<blockquote>"Columnar Mode is what makes consolidating metrics into Elasticsearch practical. Instead of storing each field multiple ways, you store it once — as a column. That gets you the storage efficiency and query speed that metrics workloads need, without giving up anything on the logs side. And everything you already have — Kibana dashboards, alerts, integrations — keeps working. You change one line when you create the index. Nothing else."</blockquote>
+
+<h3>Slide 4 — Columnar Logs</h3>
+<blockquote>"The first flavor of this is Columnar Logs, which is built specifically for log data. The one thing it keeps from the traditional approach is a full-text index on the message field — because being able to search log messages is the whole reason you'd use Elasticsearch over a warehouse in the first place. Everything else — host names, IPs, ports, rule names — goes columnar. One setting to enable it."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Slide 5 → Act 1 · Storage Footprint &nbsp;<span class="timing">~4 min</span></h2>
+
+<p class="action">→ Advance to Slide 5 (numbers load live from the demo server)</p>
+
+<blockquote>"I want to be clear that this slide is not canned. These numbers are loading right now from the actual cluster. We took 150,000 realistic firewall log events — wide schema, lots of fields, the kind of data that gets expensive — and ingested the exact same documents into three different index configurations."</blockquote>
+
+<p>Point to the bars:</p>
+<blockquote>"Standard mode — the default you'd have today — is about 125 MB. LogsDB, which Elastic already ships and is actually the default on serverless, gets that down to around 44 MB. And Columnar Logs gets it to about 20 MB. That's an 84% reduction from standard, on real data."</blockquote>
+
+<blockquote>"If you're retaining 90 days of logs today, that math means you could keep a full year for the same cost."</blockquote>
+
+<p class="action">→ Switch to http://localhost:8787 · scroll to the top</p>
+
+<p>The stat tiles at the top show the headline numbers live from the cluster. Scroll down slightly to the bar chart to show the three modes side by side — hover a bar to see the exact size.</p>
+
+<blockquote>"Same documents, same schema, same queries. One setting is the only difference between these three bars."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Act 2 · Analytics Race &nbsp;<span class="timing">~3 min</span></h2>
+
+<p class="action">→ Scroll down to the "Columnar Logs · analytics query race" section</p>
+
+<blockquote>"Okay so the storage savings are real, but the obvious question is: do you pay for it somewhere else? Let's find out — I'll run the same query against all three modes at once and we can compare the results."</blockquote>
+
+<p class="action">→ Select "Top talkers by bytes transferred" from the dropdown · click Run race</p>
+
+<p>Three latency bars appear and the result table loads below.</p>
+
+<blockquote>"Same rows, same order, same numbers. The query engine doesn't know or care what the storage mode is — it just gets answers back. And columnar is actually fast here because scanning columns is exactly what this kind of aggregation wants to do."</blockquote>
+
+<p class="action">→ Try "p95 session duration by protocol" or "Severity × action breakdown"</p>
+
+<blockquote>"You can run any of these — it's the same story each time. Your dashboards, your queries, your alerts — none of that has to change."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Act 3 · Metrics &nbsp;<span class="timing">~10 min</span></h2>
+
+<p class="action">→ Advance to Slide 6</p>
+
+<blockquote>"So that's the logs storage story. But the bigger thing for you is metrics — because this is where you'd actually be consolidating. Elasticsearch rebuilt the time-series storage engine on columnar foundations, which means it's now genuinely competitive with Prometheus on both query speed and storage efficiency. And — this is the important part — you don't have to change anything on the Grafana side to move there. We'll show that."</blockquote>
+
+<p class="action">→ Switch to http://localhost:8787 · scroll down to the "Columnar Metrics" section</p>
+
+<p>The stat tiles show data points stored, bytes per data point, and how the TSDS index compares to a standard one. Below that is a chart that auto-loaded when the page opened — interface throughput by host over 24 hours.</p>
+
+<blockquote>"This chart ran automatically when the page loaded. It's pulling 24 hours of network traffic data across 30 firewall hosts and showing me the top three by volume. You can see fw-iad-03 spiking — that's a simulated incident window we baked into the data. We'll come back to that."</blockquote>
+
+<p>Hover the surge peak to show the tooltip.</p>
+
+<p class="action">→ In the TS query dropdown, select "Surge detection — max 30-min throughput per host" · click Run TS query</p>
+
+<blockquote>"This is asking: across the whole 24-hour window, which host had the biggest peak? fw-iad-03 should be at the top. Previously you'd need a dedicated metrics store to run this kind of query efficiently. Now it's in the same cluster as your logs."</blockquote>
+
+<h3>Firewall Overview dashboard</h3>
+
+<p class="action">→ Switch to Kibana · Dashboards · open "NetOps — Firewall Overview (24h)"</p>
+
+<blockquote>"And this is what that same data looks like as a standard Kibana dashboard. I didn't have to do anything special to make this work on top of the new storage engine — Kibana just sees it as an index. That's kind of the whole point: you get the efficiency gains without having to rebuild anything on top."</blockquote>
+
+<p>Walk through the panels — call out the fw-iad-03 surge if it's visible, and the 24h time window.</p>
+
+<p class="action">→ Advance to Slide 7</p>
+
+<blockquote>"This is the slide that's most relevant to you. Your Prometheus agents point at a new endpoint — that's it on the ingest side. Your Grafana dashboards keep working because PromQL runs natively inside Elasticsearch now. There's also a migration tool that moves existing dashboards and alerts over. So the actual migration path is: change where your agents send data, run the migration tool, and you're done. Your team doesn't have to learn a new query language."</blockquote>
+
+<p class="action">→ Switch back to http://localhost:8787 · scroll to the "Native Prometheus &amp; PromQL" card</p>
+
+<p class="action">→ Select "Top 3 talkers — topk() finds the surge" · click Run PromQL</p>
+
+<blockquote>"Same data, same surge on fw-iad-03, but in PromQL. This is what your Grafana dashboards would be running — same query language, same results, but now the backend is Elasticsearch instead of a separate Prometheus instance. And your logs are already here, so correlation is just a time range away."</blockquote>
+
+<h3>Year Ahead dashboard</h3>
+
+<p class="action">→ Switch to Kibana · Dashboards · open "NetOps — Year Ahead (capacity &amp; incidents)"</p>
+
+<blockquote>"Last thing on metrics — I want to show you the time scale this engine can handle. This is 395 days of data: 30 days of history and a full year of projected forward data, hourly resolution, same 30 hosts. You don't need a data warehouse to do year-scale analytics. It's the same query engine, just a bigger window."</blockquote>
+
+<p>Point to the periodic spikes visible in the chart:</p>
+<blockquote>"Those bumps every few weeks are the incident windows I mentioned — we use them for alerting demos. But they're also useful here because they show how growth plus incident spikes interact over a longer horizon. The AI agent we're about to look at uses this exact dataset to answer capacity planning questions. So when it tells you which hosts to worry about, this is what it's working from."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Act 4 · Full-Text Search &nbsp;<span class="timing">~2 min</span></h2>
+
+<p class="action">→ Switch to http://localhost:8787 · scroll to the "Columnar Logs · full-text search" section</p>
+
+<blockquote>"Quick one before the agent demo — this is the reason you'd want logs staying in Elasticsearch rather than moving them somewhere else. Search."</blockquote>
+
+<p class="action">→ Click Search (pre-filled with "DENY ssh"), or type "TLS handshake"</p>
+
+<blockquote>"Highlighted results, individual log events, fast. Your Grafana stack can't do this — it has no concept of full-text search over log messages. Elasticsearch keeps a search index on the message field even when everything else goes columnar. So when your metrics in Elasticsearch show a spike and you want to immediately search the related logs — that's one platform, no context switch."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Act 5 · AI Agent (Agent Builder) &nbsp;<span class="timing">~8 min</span></h2>
+
+<p class="action">→ Open Kibana · AI Assistant · Agent Builder</p>
+
+<blockquote>"So this is where it gets interesting for me. Everything we've seen so far is the storage and query layer. But what I think is the really compelling story is what happens when you put an AI agent on top of all of it — and the data doesn't have to move anywhere to make that happen."</blockquote>
+
+<h3>Walk through the configuration (~2 min)</h3>
+
+<p class="action">→ Click into "NetOps Assistant"</p>
+
+<blockquote>"This is a custom agent I set up on top of the same cluster. Agent Builder is Kibana's built-in way to do this — you give the agent a system prompt and register tools it can call. Tools are things like pre-defined ES|QL queries, index searches, or Workflows."</blockquote>
+
+<p class="action">→ Open the Tools tab</p>
+
+<p>Walk through each tool briefly:</p>
+<ul>
+  <li><strong>netops_host_surge_investigation</strong> — queries the 24h metrics for a specific host. Takes a host name as a parameter, so the agent can pass in whatever host came up in the conversation.</li>
+  <li><strong>netops_firewall_log_search</strong> — full-text search against the columnar log index. This is the one that would be missing if we were using a warehouse-based agent.</li>
+  <li><strong>netops_deny_pattern_analysis</strong> — aggregates deny events by rule and protocol. No parameters — the agent just calls it when the question is about what's getting blocked.</li>
+  <li><strong>netops_capacity_outlook</strong> — queries the long-term metrics index, the 395-day dataset we just saw in the Year Ahead dashboard, enriched with datacenter and owner info.</li>
+</ul>
+
+<blockquote>"The description on each tool is literally what the model reads to decide whether to call it. That's the interface between you and the LLM — get the description right and the agent picks the right tool. Get it wrong and it either calls the wrong thing or hallucinates."</blockquote>
+
+<p class="action">→ Show the Configuration tab (system instructions)</p>
+
+<blockquote>"The system prompt tells the agent what indices exist, what the schema looks like, and how to frame answers. I also put the talking point in there — that all four tools query the same cluster. So the agent reinforces that narrative in its responses, which is a nice bonus."</blockquote>
+
+<h3>Demo conversations (~6 min)</h3>
+
+<p class="action">→ Open a conversation with the agent</p>
+
+<p class="tip"><strong>Tip:</strong> Responses take 20–40 seconds. Narrate what's happening in the reasoning trace while you wait — it makes the wait feel intentional.</p>
+
+<p><strong>Prompt 1 — Incident triage:</strong></p>
+<p class="action">→ Type: "Which host had the biggest traffic surge, and what are the top rules being denied?"</p>
+
+<blockquote>"One question, two completely different data sources — metrics and logs. Watch the reasoning trace."</blockquote>
+
+<p>As tools fire:</p>
+<blockquote>"It's deciding what to call, calling some things in parallel, and then using those results to figure out what to dig into next. Multiple queries, orchestrated by the model, against the same cluster."</blockquote>
+
+<p>When the response arrives:</p>
+<blockquote>"It led with the most interesting finding, backed it with numbers, and suggested what to look at next. That's useful in an investigation — the agent is basically driving the next step for you."</blockquote>
+
+<p><strong>Prompt 2 — Log search:</strong></p>
+<p class="action">→ Type: "Search the logs for geo-block-highrisk events on fw-iad-03"</p>
+
+<blockquote>"Now I'm asking it to search — the thing a warehouse-based agent can't do. It's going to use the full-text search tool against the columnar index."</blockquote>
+
+<p>When results arrive:</p>
+<blockquote>"Individual log events, highlighted matches. Same index we ran aggregations against two minutes ago. This is the part that requires Elasticsearch — you can't do this with just a columnar store."</blockquote>
+
+<p><strong>Prompt 3 — Capacity planning:</strong></p>
+<p class="action">→ Type: "What's the capacity outlook across the fleet, and which hosts should we be worried about?"</p>
+
+<blockquote>"This one goes to the Year Ahead dataset — the 395-day index we saw in the dashboard. The agent will join in host metadata automatically."</blockquote>
+
+<p>When results arrive, point to the datacenter/owner/environment columns:</p>
+<blockquote>"Those extra columns — datacenter, environment, owner — that's the enrichment from the lookup table, inside the same query. The agent didn't go to a second system to get that. Everything is in Elasticsearch."</blockquote>
+
+<blockquote>"So that's the full picture. Your logs are already in Elasticsearch. Metrics can move here without changing your Grafana setup. Once they're in the same place, you get correlation, search, and AI assistance across both — and that last demo shows what that actually looks like in practice. That's the story."</blockquote>
+
+<!-- ============================================================ -->
+<h2>Slides 8–10 · Wrap-up &nbsp;<span class="timing">~2 min</span></h2>
+
+<p class="action">→ Advance to Slide 8</p>
+
+<blockquote>"Everything on top — dashboards, queries, alerts, the agent we just used — it all stayed the same. One setting at index creation. That's the entire change."</blockquote>
+
+<p class="action">→ Advance to Slide 9</p>
+
+<p>This slide summarizes the four things you just showed — footprint, metrics, search, and the AI agent. Let it land without narrating it; the audience can read. Use the pause to take questions or just move to takeaways.</p>
+
+<p class="action">→ Advance to Slide 10</p>
+
+<blockquote>"Quick summary: logs are meaningfully smaller, metrics can move here without touching your Grafana setup, search still works, and the AI layer sits on top of all of it. Tech preview in 9.5, GA in 9.6."</blockquote>
+
+<blockquote>"For next steps — honestly the easiest thing is to pick one high-volume log stream, create a new index with <code>logsdb_columnar</code>, and measure your own reduction. Your number is going to be more convincing than mine."</blockquote>
+
+<div class="tip" style="margin-top:24px">
+  <strong>If time allows:</strong> Scroll to the bottom of the demo UI and show the "How the three modes differ" cards — clean side-by-side of Standard / LogsDB / Columnar Logs with the one-line setting for each. Good for technical folks who want to understand the progression.
+</div>
+
+</body>
+</html>
